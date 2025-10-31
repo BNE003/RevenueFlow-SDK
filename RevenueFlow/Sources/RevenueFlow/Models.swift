@@ -31,6 +31,9 @@ public struct PurchaseRecord: Codable {
     let transactionId: String
     let purchaseDate: Date
     let environment: String
+    let price: Decimal
+    let expirationDate: Date?
+    let isTrial: Bool
 
     enum CodingKeys: String, CodingKey {
         case appId = "app_id"
@@ -39,6 +42,9 @@ public struct PurchaseRecord: Codable {
         case transactionId = "transaction_id"
         case purchaseDate = "purchase_date"
         case environment
+        case price
+        case expirationDate = "expiration_date"
+        case isTrial = "is_trial"
     }
 }
 
