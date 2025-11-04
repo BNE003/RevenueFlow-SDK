@@ -52,8 +52,11 @@ public final class RevenueFlow: @unchecked Sendable {
 
     private var configuration: RevenueFlowConfiguration?
     private var transactionMonitor: TransactionMonitor?
+    private var sessionManager: SessionManager?
     private let supabaseClient = RFSupabaseClient()
     private var isConfigured = false
+    private var deviceUUID: String?
+    private var sessionTrackingEnabled = true
 
     // MARK: - Initialization
 
@@ -71,13 +74,14 @@ public final class RevenueFlow: @unchecked Sendable {
     /// - Parameters:
     ///   - appId: Your unique application identifier
     ///   - debugMode: Enable debug logging (default: false)
+    ///   - enableSessionTracking: Enable live session tracking (default: true)
     ///
     /// - Example:
     /// ```swift
     /// RevenueFlow.shared.configure(appId: "XYZ-123", debugMode: true)
     /// ```
     ///
-    public func configure(appId: String, debugMode: Bool = false) {
+    public func configure(appId: String, debugMode: Bool = false, enableSessionTracking: Bool = true) {
         guard !isConfigured else {
             RFLogger.shared.warning("RevenueFlow is already configured. Ignoring duplicate configuration.")
             return
@@ -85,10 +89,27 @@ public final class RevenueFlow: @unchecked Sendable {
 
         let config = RevenueFlowConfiguration(appId: appId, debugMode: debugMode)
         self.configuration = config
+        self.sessionTrackingEnabled = enableSessionTracking
 
         // Configure logger
         RFLogger.shared.configure(debugMode: debugMode)
         RFLogger.shared.info("RevenueFlow configured with appId: \(appId)")
+
+        // Initialize session manager
+        if enableSessionTracking {
+            self.sessionManager = SessionManager(
+                appId: appId,
+                supabaseClient: supabaseClient
+            )
+            RFLogger.shared.info("✅ Session tracking enabled")
+        } else {
+            RFLogger.shared.info("⏭️ Session tracking disabled")
+        }
+
+        // Register device asynchronously
+        Task {
+            await registerDevice(appId: appId)
+        }
 
         // Initialize transaction monitor
         self.transactionMonitor = TransactionMonitor(
@@ -101,6 +122,66 @@ public final class RevenueFlow: @unchecked Sendable {
 
         isConfigured = true
         RFLogger.shared.info("RevenueFlow is ready")
+    }
+
+    // MARK: - Device Registration
+
+    /// Register or update the device in Supabase
+    private func registerDevice(appId: String) async {
+        RFLogger.shared.debug("Starting device registration...")
+
+        do {
+            // Get device info from DeviceManager (on MainActor)
+            let deviceId = await MainActor.run { DeviceManager.shared.id }
+            let deviceName = await MainActor.run { DeviceManager.shared.name }
+
+            RFLogger.shared.debug("Device info - ID: \(deviceId), Name: \(deviceName)")
+
+            let uuid = try await supabaseClient.registerOrUpdateDevice(
+                deviceId: deviceId,
+                appId: appId,
+                name: deviceName
+            )
+
+            self.deviceUUID = uuid
+            RFLogger.shared.info("✅ Device registered successfully with UUID: \(uuid)")
+
+            // Update transaction monitor with device UUID
+            transactionMonitor?.setDeviceUUID(uuid)
+
+            // Update session manager with device UUID and start session
+            if let sessionManager = self.sessionManager {
+                sessionManager.setDeviceUUID(uuid)
+                sessionManager.startSession()
+            }
+
+        } catch {
+            RFLogger.shared.error("❌ Failed to register device", error: error)
+            // Continue without device UUID - purchases will still work
+        }
+    }
+
+    /// Get the current device UUID (from database)
+    public var currentDeviceUUID: String? {
+        return deviceUUID
+    }
+
+    /// Get the current device ID (local identifier)
+    public var currentDeviceID: String {
+        get async {
+            await MainActor.run {
+                DeviceManager.shared.id
+            }
+        }
+    }
+
+    /// Get the current device name
+    public var currentDeviceName: String {
+        get async {
+            await MainActor.run {
+                DeviceManager.shared.name
+            }
+        }
     }
 
     // MARK: - Public Helper Methods
@@ -136,7 +217,7 @@ public final class RevenueFlow: @unchecked Sendable {
 
     // MARK: - Lifecycle
 
-    /// Stop monitoring transactions
+    /// Stop monitoring transactions and session tracking
     ///
     /// Call this if you need to stop the SDK from monitoring transactions.
     /// This is typically not needed unless you're testing or need to temporarily
@@ -144,10 +225,11 @@ public final class RevenueFlow: @unchecked Sendable {
     ///
     public func stopMonitoring() {
         transactionMonitor?.stopMonitoring()
+        sessionManager?.stopSession()
         RFLogger.shared.info("RevenueFlow monitoring stopped")
     }
 
-    /// Restart monitoring transactions
+    /// Restart monitoring transactions and session tracking
     ///
     /// Restart transaction monitoring after it has been stopped.
     ///
@@ -158,6 +240,27 @@ public final class RevenueFlow: @unchecked Sendable {
         }
 
         transactionMonitor?.startMonitoring()
+        if sessionTrackingEnabled {
+            sessionManager?.startSession()
+        }
         RFLogger.shared.info("RevenueFlow monitoring restarted")
+    }
+
+    // MARK: - Session Info
+
+    /// Get the current session ID
+    ///
+    /// - Returns: The current session UUID, or nil if no active session
+    ///
+    public var currentSessionId: String? {
+        return sessionManager?.currentSessionId
+    }
+
+    /// Check if session tracking is currently active
+    ///
+    /// - Returns: `true` if session tracking is active
+    ///
+    public var isSessionActive: Bool {
+        return sessionManager?.isSessionActive ?? false
     }
 }

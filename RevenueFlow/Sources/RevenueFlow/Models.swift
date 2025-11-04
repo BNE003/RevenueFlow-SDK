@@ -21,12 +21,51 @@ public struct RevenueFlowConfiguration {
     }
 }
 
+// MARK: - Device Data
+
+/// Represents a device record to be sent to Supabase
+internal struct DeviceRecord: Codable {
+    let deviceId: String
+    let appId: String
+    let name: String
+    let firstSeenAt: Date?
+    let lastSeenAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case deviceId = "device_id"
+        case appId = "app_id"
+        case name
+        case firstSeenAt = "first_seen_at"
+        case lastSeenAt = "last_seen_at"
+    }
+}
+
+/// Response from device registration/update
+internal struct DeviceResponse: Codable {
+    let id: String
+    let deviceId: String
+    let appId: String
+    let name: String
+    let firstSeenAt: Date
+    let lastSeenAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case deviceId = "device_id"
+        case appId = "app_id"
+        case name
+        case firstSeenAt = "first_seen_at"
+        case lastSeenAt = "last_seen_at"
+    }
+}
+
 // MARK: - Purchase Data
 
 /// Represents a purchase record to be sent to Supabase
 public struct PurchaseRecord: Codable {
     let appId: String
     let userId: String?
+    let deviceId: String?
     let productId: String
     let transactionId: String
     let purchaseDate: Date
@@ -38,6 +77,7 @@ public struct PurchaseRecord: Codable {
     enum CodingKeys: String, CodingKey {
         case appId = "app_id"
         case userId = "user_id"
+        case deviceId = "device_id"
         case productId = "product_id"
         case transactionId = "transaction_id"
         case purchaseDate = "purchase_date"
@@ -46,6 +86,57 @@ public struct PurchaseRecord: Codable {
         case expirationDate = "expiration_date"
         case isTrial = "is_trial"
     }
+}
+
+// MARK: - Session Data
+
+/// Represents an active session record to be sent to Supabase
+internal struct SessionRecord: Codable {
+    let deviceId: String
+    let appId: String
+    let lastHeartbeat: Date
+    let countryCode: String?
+    let region: String?
+    let sessionStartedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case deviceId = "device_id"
+        case appId = "app_id"
+        case lastHeartbeat = "last_heartbeat"
+        case countryCode = "country_code"
+        case region
+        case sessionStartedAt = "session_started_at"
+    }
+}
+
+/// Response from session creation/update
+internal struct SessionResponse: Codable {
+    let id: String
+    let deviceId: String
+    let appId: String
+    let lastHeartbeat: Date
+    let countryCode: String?
+    let region: String?
+    let sessionStartedAt: Date
+    let createdAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case deviceId = "device_id"
+        case appId = "app_id"
+        case lastHeartbeat = "last_heartbeat"
+        case countryCode = "country_code"
+        case region
+        case sessionStartedAt = "session_started_at"
+        case createdAt = "created_at"
+    }
+}
+
+/// Response from Edge Function session creation
+internal struct EdgeFunctionSessionResponse: Codable {
+    let session_id: String
+    let country_code: String?
+    let region: String?
 }
 
 // MARK: - Errors

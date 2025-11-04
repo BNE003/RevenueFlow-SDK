@@ -8,10 +8,17 @@ internal final class TransactionMonitor: @unchecked Sendable {
     private let supabaseClient: RFSupabaseClient
     private var transactionUpdateTask: Task<Void, Error>?
     private var processedTransactionIds = Set<UInt64>()
+    private var deviceUUID: String?
 
     init(appId: String, supabaseClient: RFSupabaseClient) {
         self.appId = appId
         self.supabaseClient = supabaseClient
+    }
+
+    /// Set the device UUID (called after device registration)
+    func setDeviceUUID(_ uuid: String) {
+        self.deviceUUID = uuid
+        RFLogger.shared.debug("TransactionMonitor: Device UUID set to \(uuid)")
     }
 
     /// Start monitoring for new transactions
@@ -107,6 +114,7 @@ internal final class TransactionMonitor: @unchecked Sendable {
         return PurchaseRecord(
             appId: appId,
             userId: nil, // Can be set later if you have user identification
+            deviceId: deviceUUID, // Include device UUID
             productId: transaction.productID,
             transactionId: String(transaction.id),
             purchaseDate: transaction.purchaseDate,

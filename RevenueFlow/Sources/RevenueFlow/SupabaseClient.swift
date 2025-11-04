@@ -30,6 +30,64 @@ internal final class RFSupabaseClient: @unchecked Sendable {
 
     // MARK: - API Methods
 
+    /// Register or update device in Supabase
+    /// - Parameters:
+    ///   - deviceId: The unique device identifier
+    ///   - appId: The app identifier
+    ///   - name: The friendly device name
+    /// - Returns: The UUID from the database
+    func registerOrUpdateDevice(deviceId: String, appId: String, name: String) async throws -> String {
+        guard let client = client else {
+            RFLogger.shared.warning("⚠️ Supabase not configured - device not registered")
+            throw RevenueFlowError.supabaseNotConfigured
+        }
+
+        RFLogger.shared.debug("📱 Attempting to register/update device:")
+        RFLogger.shared.debug("   Device ID: \(deviceId)")
+        RFLogger.shared.debug("   App ID: \(appId)")
+        RFLogger.shared.debug("   Name: \(name)")
+
+        do {
+            let now = Date()
+
+            // Try to insert or update (upsert) the device
+            let deviceRecord = DeviceRecord(
+                deviceId: deviceId,
+                appId: appId,
+                name: name,
+                firstSeenAt: nil, // Will be set by DB default on first insert
+                lastSeenAt: now
+            )
+
+            RFLogger.shared.debug("🔄 Sending upsert request to Supabase...")
+
+            // Use upsert to insert or update based on device_id uniqueness
+            let response: [DeviceResponse] = try await client
+                .from("devices")
+                .upsert(deviceRecord, onConflict: "device_id")
+                .select()
+                .execute()
+                .value
+
+            RFLogger.shared.debug("📥 Received response from Supabase, parsing...")
+
+            guard let device = response.first else {
+                RFLogger.shared.error("❌ No device returned from upsert")
+                throw RevenueFlowError.unknownError("No device returned from upsert")
+            }
+
+            RFLogger.shared.info("✅ Device registered/updated successfully!")
+            RFLogger.shared.info("   Name: \(device.name)")
+            RFLogger.shared.info("   UUID: \(device.id)")
+            return device.id
+
+        } catch {
+            RFLogger.shared.error("❌ Failed to register/update device", error: error)
+            RFLogger.shared.error("   Error details: \(error.localizedDescription)")
+            throw RevenueFlowError.networkError(error)
+        }
+    }
+
     /// Send purchase record to Supabase database
     /// - Parameter record: The purchase record to send
     func sendPurchase(_ record: PurchaseRecord) async throws {
@@ -74,6 +132,106 @@ internal final class RFSupabaseClient: @unchecked Sendable {
     /// Check if Supabase is properly configured
     var isConfigured: Bool {
         return client != nil
+    }
+
+    // MARK: - Session Management
+
+    /// Start a new active session or update existing one
+    /// - Parameters:
+    ///   - deviceId: The device UUID from database
+    ///   - appId: The app identifier
+    /// - Returns: The session UUID from the database
+    func startSession(deviceId: String, appId: String) async throws -> String {
+        guard let client = client else {
+            RFLogger.shared.warning("⚠️ Supabase not configured - session not started")
+            throw RevenueFlowError.supabaseNotConfigured
+        }
+
+        RFLogger.shared.debug("🚀 Starting session for device: \(deviceId)")
+
+        do {
+            let now = Date()
+
+            let sessionRecord = SessionRecord(
+                deviceId: deviceId,
+                appId: appId,
+                lastHeartbeat: now,
+                countryCode: nil, // TODO: Add geolocation via Edge Function later
+                region: nil,
+                sessionStartedAt: now
+            )
+
+            // Upsert based on unique constraint (device_id, app_id)
+            let response: [SessionResponse] = try await client
+                .from("active_sessions")
+                .upsert(sessionRecord, onConflict: "device_id,app_id")
+                .select()
+                .execute()
+                .value
+
+            guard let session = response.first else {
+                RFLogger.shared.error("❌ No session returned from upsert")
+                throw RevenueFlowError.unknownError("No session returned from upsert")
+            }
+
+            RFLogger.shared.info("✅ Session started successfully!")
+            RFLogger.shared.info("   Session UUID: \(session.id)")
+            return session.id
+
+        } catch {
+            RFLogger.shared.error("❌ Failed to start session", error: error)
+            throw RevenueFlowError.networkError(error)
+        }
+    }
+
+    /// Send heartbeat to update session activity
+    /// - Parameter sessionId: The session UUID
+    func sendHeartbeat(sessionId: String) async throws {
+        guard let client = client else {
+            RFLogger.shared.debug("⚠️ Supabase not configured - heartbeat not sent")
+            return
+        }
+
+        RFLogger.shared.debug("💓 Sending heartbeat for session: \(sessionId)")
+
+        do {
+            try await client
+                .from("active_sessions")
+                .update(["last_heartbeat": Date()])
+                .eq("id", value: sessionId)
+                .execute()
+
+            RFLogger.shared.debug("✅ Heartbeat sent successfully")
+
+        } catch {
+            RFLogger.shared.error("❌ Failed to send heartbeat", error: error)
+            throw RevenueFlowError.networkError(error)
+        }
+    }
+
+    /// End an active session
+    /// - Parameter sessionId: The session UUID
+    func endSession(sessionId: String) async throws {
+        guard let client = client else {
+            RFLogger.shared.debug("⚠️ Supabase not configured - session not ended")
+            return
+        }
+
+        RFLogger.shared.debug("🛑 Ending session: \(sessionId)")
+
+        do {
+            try await client
+                .from("active_sessions")
+                .delete()
+                .eq("id", value: sessionId)
+                .execute()
+
+            RFLogger.shared.info("✅ Session ended successfully")
+
+        } catch {
+            RFLogger.shared.error("❌ Failed to end session", error: error)
+            throw RevenueFlowError.networkError(error)
+        }
     }
 }
 
