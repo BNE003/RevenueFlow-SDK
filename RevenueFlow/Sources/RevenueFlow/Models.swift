@@ -97,6 +97,7 @@ internal struct SessionRecord: Codable {
     let lastHeartbeat: Date
     let countryCode: String?
     let region: String?
+    let city: String?
     let sessionStartedAt: Date
 
     enum CodingKeys: String, CodingKey {
@@ -105,6 +106,7 @@ internal struct SessionRecord: Codable {
         case lastHeartbeat = "last_heartbeat"
         case countryCode = "country_code"
         case region
+        case city
         case sessionStartedAt = "session_started_at"
     }
 }
@@ -117,6 +119,7 @@ internal struct SessionResponse: Codable {
     let lastHeartbeat: Date
     let countryCode: String?
     let region: String?
+    let city: String?
     let sessionStartedAt: Date
     let createdAt: Date
 
@@ -127,16 +130,35 @@ internal struct SessionResponse: Codable {
         case lastHeartbeat = "last_heartbeat"
         case countryCode = "country_code"
         case region
+        case city
         case sessionStartedAt = "session_started_at"
         case createdAt = "created_at"
     }
 }
 
 /// Response from Edge Function session creation
+internal struct EdgeFunctionSessionRequest: Codable {
+    let deviceId: String
+    let appId: String
+
+    enum CodingKeys: String, CodingKey {
+        case deviceId = "device_id"
+        case appId = "app_id"
+    }
+}
+
 internal struct EdgeFunctionSessionResponse: Codable {
-    let session_id: String
-    let country_code: String?
+    let sessionId: String
+    let countryCode: String?
     let region: String?
+    let city: String?
+
+    enum CodingKeys: String, CodingKey {
+        case sessionId = "session_id"
+        case countryCode = "country_code"
+        case region
+        case city
+    }
 }
 
 // MARK: - Errors

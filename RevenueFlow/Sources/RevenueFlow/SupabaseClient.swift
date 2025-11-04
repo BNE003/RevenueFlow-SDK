@@ -150,13 +150,35 @@ internal final class RFSupabaseClient: @unchecked Sendable {
         RFLogger.shared.debug("🚀 Starting session for device: \(deviceId)")
 
         do {
+            let edgePayload = EdgeFunctionSessionRequest(deviceId: deviceId, appId: appId)
+
+            do {
+                let response: EdgeFunctionSessionResponse = try await client.functions.invoke(
+                    "start-session-with-geo",
+                    options: FunctionInvokeOptions(method: .post, body: edgePayload)
+                )
+
+                RFLogger.shared.info("🌍 Session geo resolved via Edge Function")
+                if let countryCode = response.countryCode {
+                    RFLogger.shared.debug("   Country: \(countryCode)")
+                }
+                if let region = response.region {
+                    RFLogger.shared.debug("   Region: \(region)")
+                }
+
+                RFLogger.shared.info("✅ Session started via Edge Function with ID: \(response.sessionId)")
+                return response.sessionId
+            } catch {
+                RFLogger.shared.warning("⚠️ Edge Function start-session-with-geo failed, falling back to direct session upsert: \(error.localizedDescription)")
+            }
+
             let now = Date()
 
             let sessionRecord = SessionRecord(
                 deviceId: deviceId,
                 appId: appId,
                 lastHeartbeat: now,
-                countryCode: nil, // TODO: Add geolocation via Edge Function later
+                countryCode: nil, // Edge function unavailable, no geo data
                 region: nil,
                 sessionStartedAt: now
             )
@@ -234,4 +256,3 @@ internal final class RFSupabaseClient: @unchecked Sendable {
         }
     }
 }
-
