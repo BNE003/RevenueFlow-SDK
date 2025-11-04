@@ -14,7 +14,7 @@ const serviceRoleKey =
 
 if (!supabaseUrl || !serviceRoleKey) {
   throw new Error(
-    "Environment variables SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set"
+    "Missing required env vars: SUPABASE_URL (or SERVICE_SUPABASE_URL) and SERVICE_ROLE_KEY"
   );
 }
 
@@ -32,31 +32,38 @@ const getClientIp = (headers: Headers): string | null => {
   return realIp?.trim() ?? null;
 };
 
-const fetchGeoInfo = async (ip: string | null) => {
+type GeoInfo = {
+  countryCode: string | null;
+  region: string | null;
+  city: string | null;
+};
+
+const fetchGeoInfo = async (ip: string | null): Promise<GeoInfo> => {
   if (!ip) {
-    return { countryCode: null as string | null, region: null as string | null };
+    return { countryCode: null, region: null, city: null };
   }
 
   try {
     const response = await fetch(`https://ipwho.is/${ip}`);
     if (!response.ok) {
       console.warn("ipwho.is lookup failed", await response.text());
-      return { countryCode: null, region: null };
+      return { countryCode: null, region: null, city: null };
     }
 
     const data = await response.json();
     if (data.success === false) {
       console.warn("ipwho.is lookup unsuccessful", data);
-      return { countryCode: null, region: null };
+      return { countryCode: null, region: null, city: null };
     }
 
     return {
       countryCode: data.country_code ?? null,
-      region: data.region ?? data.city ?? null,
+      region: data.region ?? data.state ?? null,
+      city: data.city ?? null,
     };
   } catch (error) {
     console.warn("ipwho.is lookup threw", error);
-    return { countryCode: null, region: null };
+    return { countryCode: null, region: null, city: null };
   }
 };
 
@@ -92,6 +99,7 @@ Deno.serve(async (req) => {
           session_started_at: now,
           country_code: geo.countryCode,
           region: geo.region,
+          city: geo.city,
         },
         { onConflict: "device_id,app_id" }
       )
@@ -114,6 +122,7 @@ Deno.serve(async (req) => {
         session_id: data.id,
         country_code: geo.countryCode,
         region: geo.region,
+        city: geo.city,
       }),
       {
         status: 200,

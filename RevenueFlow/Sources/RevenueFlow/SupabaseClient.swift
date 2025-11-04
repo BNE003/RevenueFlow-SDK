@@ -165,6 +165,9 @@ internal final class RFSupabaseClient: @unchecked Sendable {
                 if let region = response.region {
                     RFLogger.shared.debug("   Region: \(region)")
                 }
+                if let city = response.city {
+                    RFLogger.shared.debug("   City: \(city)")
+                }
 
                 RFLogger.shared.info("✅ Session started via Edge Function with ID: \(response.sessionId)")
                 return response.sessionId
@@ -180,6 +183,7 @@ internal final class RFSupabaseClient: @unchecked Sendable {
                 lastHeartbeat: now,
                 countryCode: nil, // Edge function unavailable, no geo data
                 region: nil,
+                city: nil,
                 sessionStartedAt: now
             )
 
